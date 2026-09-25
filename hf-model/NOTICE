@@ -1,0 +1,7 @@
+KevANE includes selected source files from Kev by Jared Palmer,
+https://github.com/jaredpalmer/kev, revision
+c9c1f855505336ac32092a5f68305d397f7fcc3e (Apache-2.0).
+
+The converted model is derived from jaredpalmer/kev-0.6b and
+Qwen/Qwen3-0.6B-Base (Apache-2.0). ANEMLL is used for conversion and is not
+included in the runtime distribution.

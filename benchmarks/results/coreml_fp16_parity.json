@@ -1,0 +1,49 @@
+{
+  "milestone": "v0.3-coreml-fp16",
+  "date": "2026-09-24",
+  "model": "hf-model/kev-qwen3-0.6b-hidden.mlpackage",
+  "graph": "embed -> 28 layers prefill (KV 0-offset write) -> final RMSNorm; fp16, no LUT; seq=512",
+  "inputs": ["input_ids [1,512] int32", "position_ids [512] int32", "causal_mask [1,1,512,512] fp16 + state"],
+  "convert_env": "KevANE-coreml (python 3.12, torch 2.5.0, numpy 1.26.4, coremltools 9.0)",
+  "runtime_env": "KevANE (python 3.13, torch 2.8.0, numpy 2.5.3, coremltools 9.0)",
+  "h1_hidden_parity": {
+    "result": "PASS",
+    "metric": "cosine(CoreML fp16 hidden, PyTorch fp32 hidden)",
+    "min": 0.999058,
+    "per_sample": {
+      "tiny_state_noul_001": 0.999848,
+      "short_state_intent_001": 0.999879,
+      "jarvis_greeting_001": 0.999058,
+      "disk_full_001": 0.999754,
+      "rand16": 0.999836,
+      "rand32": 0.999607,
+      "rand64": 0.999836
+    },
+    "threshold": 0.999
+  },
+  "h2_probability_parity": {
+    "result": "PASS (with 1 documented boundary flip)",
+    "argmax_match": "34/35",
+    "max_abs_dp": 0.08,
+    "median_abs_dp": 0.017,
+    "p90_abs_dp": 0.041,
+    "boundary_flips": [
+      {
+        "case": "triage_two_way_001.category",
+        "golden_argmax": 0,
+        "coreml_argmax": 1,
+        "golden_margin": 0.086,
+        "logit_gap": 0.173,
+        "verdict": "golden 即近似平局（p=0.543/0.457），margin 低于 fp16 噪声包络（|Δp| max 0.08）；按手册 10.2 记录为边界样本，非系统性错误"
+      }
+    ]
+  },
+  "performance_note": "avg 107ms/case (CPU_AND_NE, 固定 seq=512 含 padding 计算)；MPS fp32 基线 warm p50 128ms。优化（动态 shape / chunk / prefix cache）留待 v0.4",
+  "pending": [
+    "ANE placement 的直接证据（Instruments / powermetrics ane_power 采样需 sudo，见 23_profile_ane.sh）"
+  ],
+  "reproduce": [
+    "conda activate KevANE-coreml && python scripts/21_convert_anemll_backbone.py --seq-len 512",
+    "conda activate KevANE && python scripts/22_verify_coreml_hidden.py"
+  ]
+}

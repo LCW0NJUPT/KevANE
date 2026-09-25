@@ -1,0 +1,10 @@
+Kev compatibility modules included in KevANE
+
+Source: https://github.com/jaredpalmer/kev
+Commit: c9c1f855505336ac32092a5f68305d397f7fcc3e
+Files: kev/__init__.py, kev/api.py, kev/model.py, kev/checkpoint.py, kev/device.py
+License: Apache-2.0 (see repository LICENSE)
+
+These files are copied from the pinned upstream revision so KevANE's runtime
+and conversion scripts use a consistent System One schema and packed encoder.
+Future KevANE releases may update this snapshot after parity testing.
