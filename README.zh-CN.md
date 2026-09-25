@@ -23,7 +23,7 @@ bash scripts/install.sh
 
 安装脚本会明确选用 `kevane-runtime` Conda 环境，不受当前激活环境影响；必要时创建该环境，下载前先核对模型仓库文件，并创建 `~/.local/bin/kev-ane` 命令。服务直接从源码目录导入代码，安装脚本不会执行 `pip install -e`，也**不会自动启动服务**。如果终端的 `PATH` 尚未包含 `~/.local/bin`，在 `~/.zprofile` 中加入 `export PATH="$HOME/.local/bin:$PATH"`，再打开新终端。此前也可用 `~/.local/bin/kev-ane` 执行下列命令。
 
-模型文件默认放在**当前克隆仓库的 `hf-model/` 目录**。安装脚本先检查本地模型，文件齐全就跳过下载；否则先核对[模型仓库](https://huggingface.co/flylcw/KevANE-0.6B)的文件清单，再将所需文件下载到 `hf-model/`。若模型已放在其他目录，可运行 `bash scripts/install.sh --model-dir /模型目录的绝对路径`，无需复制或下载。
+模型文件默认放在**当前克隆仓库的 `hf-model/` 目录**。安装脚本先检查本地模型，文件齐全就跳过下载；否则先核对[模型仓库](https://huggingface.co/flylcw/KevANE-0.6B)的文件清单，再将所需文件下载到 `hf-model/`。若模型已放在其他目录，可运行 `bash scripts/install.sh --model-dir /模型目录的绝对路径`，无需复制或下载。无法直连 huggingface.co 的网络可先设置镜像，例如 `export HF_ENDPOINT=https://hf-mirror.com`；安装脚本的仓库检查和 `hf download` 都会遵循该变量。
 
 运行环境由**本仓库**定义；所需的 Kev 兼容模块已按固定版本放在 `src/kev/`，普通用户无需另行 clone 或安装 Kev。Core ML 模型、分词器和 Pointer Head 从[独立的模型仓库](https://huggingface.co/flylcw/KevANE-0.6B)下载。安装后请保留克隆的源码目录，服务会从中读取代码和模型。
 
@@ -74,7 +74,8 @@ Core ML 模型在独立子进程中运行，以便原生 Core ML 意外退出时
 ## 验证结果与限制
 
 - 当前 Core ML 图的输入固定为 512 token，是首版针对短判断和较低延迟选定的转换参数，不是 Kev 模型的完整上下文上限。打包请求超过 512 token 时，服务会把最多 16 个相互独立的问题拆成多次推理，每次都带上共同的上下文。如果“上下文 + 任意单个问题”仍超过 512 token，就返回 HTTP 422；不会悄悄截断。聊天历史过长时可能损失有用信息，要彻底扩大单次上下文需重新转换并验证更长的模型，多次推理也会增加延迟。
-- 与原始 FP32 路径的记录对比中，七个样本的 hidden-state 余弦相似度最低为 **0.999058**；**35 个判断中的 34 个**保持相同首选答案，另一个是概率接近的边界样本。详见[对照记录](benchmarks/results/coreml_fp16_parity.json)。
+- 与原始 FP32 路径的记录对比中，七个样本的 hidden-state 余弦相似度最低为 **0.999058**；**35 个判断中的 34 个**保持相同首选答案，另一个是概率接近的边界样本。该对比已在发布的 `kevane-runtime` 环境中复测确认。详见[对照记录](benchmarks/results/coreml_fp16_parity.json)。
+- 模型就位后，可运行 `conda activate kevane-runtime && python -m pytest tests/` 执行同一套对照、契约和编码检查。新克隆的仓库在 `hf-model/` 尚未就绪时会自动跳过依赖模型的测试。
 - `CPU_AND_NE` 排除 Core ML 主干使用 GPU，但不能证明每个操作都在 ANE 上执行；Pointer Head 和输入准备仍用 CPU。如需硬件归因，应使用 Instruments。
 - 服务默认无鉴权且只适用于本机，不应直接暴露到网络。
 

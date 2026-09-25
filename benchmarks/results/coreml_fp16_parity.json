@@ -6,6 +6,7 @@
   "inputs": ["input_ids [1,512] int32", "position_ids [512] int32", "causal_mask [1,1,512,512] fp16 + state"],
   "convert_env": "KevANE-coreml (python 3.12, torch 2.5.0, numpy 1.26.4, coremltools 9.0)",
   "runtime_env": "KevANE (python 3.13, torch 2.8.0, numpy 2.5.3, coremltools 9.0)",
+  "env_provenance": "上面的环境名是 2026-09-24 记录时的开发环境名（版本与 environment/conversion.yml 一致；运行环境为发布前的 py3.13/torch2.8）。2026-09-26 在与 environment/runtime.yml 完全一致的 kevane-runtime（python 3.12.14, torch 2.5.0, numpy 1.26.4, coremltools 9.0）中复测通过：min cosine 0.999059（原 0.999058），argmax 34/35 且为同一边界样本，max|Δp|=0.080，avg 112ms/case（原 107ms）。差异在 fp16 复测噪声内。",
   "h1_hidden_parity": {
     "result": "PASS",
     "metric": "cosine(CoreML fp16 hidden, PyTorch fp32 hidden)",
@@ -43,7 +44,7 @@
     "ANE placement 的直接证据（Instruments / powermetrics ane_power 采样需 sudo，见 23_profile_ane.sh）"
   ],
   "reproduce": [
-    "conda activate KevANE-coreml && python scripts/21_convert_anemll_backbone.py --seq-len 512",
-    "conda activate KevANE && python scripts/22_verify_coreml_hidden.py"
+    "conda activate kevane-conversion && python scripts/21_convert_anemll_backbone.py --seq-len 512",
+    "conda activate kevane-runtime && python scripts/22_verify_coreml_hidden.py"
   ]
 }

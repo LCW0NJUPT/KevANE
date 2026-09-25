@@ -15,7 +15,6 @@ from pathlib import Path
 import threading
 from functools import lru_cache
 from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .encoder import ContextOverflowANE, Encoder
@@ -64,17 +63,30 @@ class KevANEServer:
         }
 
 
+# 本地服务不启用 CORS：客户端（Jarvis 等）是原生应用，无需跨域；放开 CORS
+# 会让用户浏览器中任意网页直接 POST 并读取本接口（drive-by-localhost）。
+MAX_BODY_BYTES = 4 * 1024 * 1024  # state/questions 本身远小于此；先挡异常大请求
+
+
 def create_app(server: KevANEServer) -> FastAPI:
     app = FastAPI(title="kevane")
-    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
-                       expose_headers=["x-typesafe-request-id"])
 
     @app.middleware("http")
     async def typesafe(request, call_next):
-        if server.api_key and request.url.path in {"/v1/systemone", "/systemone", "/v1/models", "/models"} and not hmac.compare_digest(
-                request.headers.get("authorization", ""), f"Bearer {server.api_key}"):
-            resp = JSONResponse({"detail": "missing or invalid API key; send Authorization: Bearer <KEVANE_API_KEY>"},
-                                401, {"www-authenticate": "Bearer"})
+        if request.method == "POST" and int(request.headers.get("content-length") or 0) > MAX_BODY_BYTES:
+            return JSONResponse({"detail": f"request body too large (limit {MAX_BODY_BYTES} bytes)"}, 413,
+                                {"x-typesafe-request-id": request.headers.get("x-typesafe-request-id")
+                                 or uuid.uuid4().hex})
+        if server.api_key and request.url.path in {"/v1/systemone", "/systemone", "/v1/models", "/models"}:
+            # header 按 latin-1 解码，可能含非 ASCII 字符；compare_digest 要求同类型，
+            # 对 str 传非 ASCII 会抛 TypeError（变成 500），先编码成 bytes。
+            given = request.headers.get("authorization", "").encode("latin-1", "ignore")
+            expected = f"Bearer {server.api_key}".encode("latin-1", "ignore")
+            if not hmac.compare_digest(given, expected):
+                resp = JSONResponse({"detail": "missing or invalid API key; send Authorization: Bearer <KEVANE_API_KEY>"},
+                                    401, {"www-authenticate": "Bearer"})
+            else:
+                resp = await call_next(request)
         else:
             resp = await call_next(request)
         resp.headers["x-typesafe-request-id"] = request.headers.get("x-typesafe-request-id") or uuid.uuid4().hex

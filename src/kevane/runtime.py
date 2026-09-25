@@ -50,9 +50,13 @@ def _compiled_backbone_path(mlpackage: str) -> tuple[Path, float]:
     t0 = time.monotonic()
     try:
         ct.utils.compile_model(str(package), destination_path=str(temporary))
-        # Another process may have completed the same compile while we worked.
+        # Another process may have completed the same compile while we worked;
+        # rename only if ours is still needed, and tolerate losing the race.
         if not compiled.exists():
-            temporary.rename(compiled)
+            try:
+                temporary.rename(compiled)
+            except OSError:
+                pass
     finally:
         if temporary.exists():
             import shutil

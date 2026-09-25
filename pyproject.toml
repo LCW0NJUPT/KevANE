@@ -1,6 +1,10 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "kevane"
-version = "0.1.0"
+version = "0.3.0"
 description = "Run Kev 0.6B System One decisions locally on Apple Silicon with Core ML"
 requires-python = ">=3.12,<3.13"
 # Dependencies are pinned in the Conda environment files.
@@ -12,5 +16,4 @@ packages = ["kevane", "kev"]
 package-dir = {"" = "src"}
 
 [tool.setuptools.package-data]
-kevane = ["py.typed"]
 kev = ["UPSTREAM.txt"]

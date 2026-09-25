@@ -68,6 +68,8 @@ if ! model_ready "$MODEL"; then
   fi
     # Check the published file list before creating an environment or
     # downloading anything. A placeholder model card is not a usable model.
+    # HF_ENDPOINT (e.g. https://hf-mirror.com) is honoured for both this check
+    # and the later `hf download`, matching huggingface_hub's own behaviour.
     CONDA_BASE="$(conda info --base)"
     "$CONDA_BASE/bin/python" - <<'PY'
 import json
@@ -75,7 +77,8 @@ import os
 import sys
 import urllib.request
 
-url = 'https://huggingface.co/api/models/flylcw/KevANE-0.6B'
+endpoint = os.environ.get('HF_ENDPOINT', 'https://huggingface.co').rstrip('/')
+url = endpoint + '/api/models/flylcw/KevANE-0.6B'
 headers = {'User-Agent': 'KevANE-installer'}
 if os.environ.get('HF_TOKEN'):
     headers['Authorization'] = 'Bearer ' + os.environ['HF_TOKEN']
@@ -118,9 +121,11 @@ if [[ ! -x "$PYTHON" ]]; then
   echo "Could not find the $ENV_NAME Python executable." >&2; exit 1
 fi
 if ! "$PYTHON" -c 'import coremltools, fastapi, huggingface_hub, torch, transformers, uvicorn' >/dev/null 2>&1; then
-  echo "Runtime dependencies are missing from $ENV_NAME." >&2
-  printf 'Run: conda env update -n %s -f %q\n' "$ENV_NAME" "$ROOT/environment/runtime.yml" >&2
-  exit 1
+  echo "Runtime dependencies are missing from $ENV_NAME; updating from environment/runtime.yml ..." >&2
+  conda env update -n "$ENV_NAME" -f "$ROOT/environment/runtime.yml"
+  "$PYTHON" -c 'import coremltools, fastapi, huggingface_hub, torch, transformers, uvicorn' >/dev/null 2>&1 || {
+    echo "Dependencies still missing from $ENV_NAME after conda env update." >&2; exit 1;
+  }
 fi
 
 if ! model_ready "$MODEL"; then

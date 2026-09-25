@@ -8,6 +8,11 @@ import torch
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
+# Encoder 需要 hf-model/ 的 tokenizer；新 clone 上跳过而不是收集报错。
+if not (ROOT / "hf-model" / "tokenizer.json").is_file():
+    pytest.skip("tokenizer not present in hf-model/; run scripts/install.sh first",
+                allow_module_level=True)
+
 from kev.model import branch_mask_batch  # noqa: E402
 from kevane.encoder import ContextOverflowANE, Encoder  # noqa: E402
 
