@@ -4,6 +4,7 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .venv/
+uv.lock
 third_party/
 build/
 models/
