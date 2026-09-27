@@ -132,7 +132,8 @@ if Path(plist).exists():
     old_env = plistlib.loads(Path(plist).read_bytes()).get('EnvironmentVariables', {})
 env = {'PYTHONUNBUFFERED': '1', 'CONDA_PREFIX': sys.prefix,
        'CONDA_DEFAULT_ENV': Path(sys.prefix).name,
-       'OMP_NUM_THREADS': '2', 'OPENBLAS_NUM_THREADS': '1',
+       'OMP_NUM_THREADS': '2', 'OMP_WAIT_POLICY': 'PASSIVE',
+       'KMP_BLOCKTIME': '0', 'OPENBLAS_NUM_THREADS': '1',
        'VECLIB_MAXIMUM_THREADS': '2', 'TOKENIZERS_PARALLELISM': 'false',
        'PATH': str(Path(sys.prefix) / 'bin') + ':/usr/bin:/bin'}
 api_key = os.environ.get('KEVANE_API_KEY', old_env.get('KEVANE_API_KEY'))

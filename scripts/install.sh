@@ -204,7 +204,11 @@ fi
 echo "Installed: $LAUNCHER"
 if (( ALIAS_AVAILABLE )); then echo "Commands: kev-ane (primary), kevane (alias)"; fi
 echo "Model: $MODEL"
-echo "The service is stopped until you run: $LAUNCHER start --wait"
+if launchctl print "gui/$(id -u)/info.kevane.systemone" >/dev/null 2>&1; then
+  echo "The service is still running; apply updated code with: $LAUNCHER restart --wait"
+else
+  echo "The service is stopped until you run: $LAUNCHER start --wait"
+fi
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
   echo "The command directory $BIN_DIR is not on this shell's PATH."
   echo "For the default macOS zsh, add this to ~/.zprofile and open a new terminal:"

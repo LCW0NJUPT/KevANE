@@ -7,9 +7,15 @@
     KEVANE_API_KEY=local python scripts/30_systemone_server.py --port 8008   # 开启 Bearer 鉴权
 """
 import argparse
+import os
 import signal
 import sys
 from pathlib import Path
+
+# Core ML inference runs in a child process. Keep OpenMP workers from spinning
+# in the HTTP parent while it waits for that child to return a prediction.
+os.environ.setdefault("OMP_WAIT_POLICY", "PASSIVE")
+os.environ.setdefault("KMP_BLOCKTIME", "0")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))

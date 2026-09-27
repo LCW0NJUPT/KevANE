@@ -2,9 +2,61 @@
 
 # KevANE
 
+[![macOS 15+](https://img.shields.io/badge/macOS-15%2B-black?logo=apple)](https://apple.github.io/coremltools/docs-guides/source/stateful-models.html)
+[![Core ML](https://img.shields.io/badge/Core_ML-FP16-blue)](#工作方式)
+[![Apple Neural Engine](https://img.shields.io/badge/Apple_Neural_Engine-CPU_AND_NE-green)](#为什么用-kev为什么用-ane)
+[![Hugging Face Model](https://img.shields.io/badge/Hugging_Face-Model-yellow?logo=huggingface)](https://huggingface.co/flylcw/KevANE-0.6B)
+
 [English](README.md) · [模型文件与模型卡](https://huggingface.co/flylcw/KevANE-0.6B) · [许可证](LICENSE)
 
 KevANE 让 **Kev 0.6B 判断模型**在 Apple Silicon 本机运行。项目将 Qwen3 主干转换为 Core ML，并提供兼容 TypeSafe 的 `POST /v1/systemone` 接口，可供 [Jev Jarvis](https://github.com/jev-chat/jev-chat-jarvis-mac) 等客户端调用。它处理选择、评分和是非判断，不负责生成回复文字。
+
+## 快速体验
+
+需要 **Apple Silicon Mac、macOS 15+、已安装 [Conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html)**，以及数 GB 可用空间。当前有状态 Core ML 模型要求 macOS 15 或更新版本。
+
+首次使用，一行完成克隆、安装并等待服务就绪：
+
+```bash
+git clone https://github.com/LCW0NJUPT/KevANE.git && cd KevANE && bash scripts/install.sh && ~/.local/bin/kev-ane start --wait
+```
+
+首次会按需下载模型并完成本机设备准备，需要等待；安装脚本本身不启动服务，上面的最后一条命令负责启动。使用完整命令路径，无须先配置 `PATH`。已有克隆的更新方法、镜像和本地模型选项见[安装](#安装)及[启动、停止与卸载](#启动停止与卸载)。
+
+接着发起一次真实判断：将“早上好！”归类为“问候／催进度／求助”。
+
+```bash
+curl --fail-with-body --noproxy '*' http://127.0.0.1:8008/v1/systemone \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"kevane-0.6b","state":"早上好！","questions":{"intent":{"type":"choice","instructions":"这句话的意图是什么？","criteria":{"问候":null,"催进度":null,"求助":null}}}}'
+```
+
+返回 JSON 中的 `answers.intent` 包含 `choice`（首选项）、`confidence`（置信度）和 `probabilities`（各选项概率）；以实际返回为准。这同时演示了接口的用途：输入上下文与候选项，得到结构化判断，供应用继续处理。
+
+[连接 Jarvis](#连接-jarvis) · [停止与卸载](#启动停止与卸载) · [验证结果与限制](#验证结果与限制) · [重新转换模型](#从原始检查点重新转换)
+
+## 工作方式
+
+```text
+Context + Questions + Candidate Options
+                    ↓
+      CPU: Kev Encoder + Tokenizer
+                    ↓
+    Packed Input · padded to 512 tokens
+                    ↓
+     Core ML: 28-Layer Backbone · FP16
+              CPU_AND_NE
+                    ↓
+               Hidden States
+                    ↓
+           CPU: Pointer Head
+                    ↓
+       Answers + Option Probabilities
+```
+
+单次最多容纳 512 个有效 token，较短输入补齐到固定长度；候选项也参与主干编码。`CPU_AND_NE` 排除 GPU，但不保证每个操作都在 ANE 上执行。超长请求的拆分规则见[验证结果与限制](#验证结果与限制)。
+
+Core ML 模型在独立子进程中运行，以便原生 Core ML 意外退出时保住 HTTP 服务。合并后的 PyTorch 主干仅供转换，日常推理不加载。模型文件清单见 [Hugging Face 模型卡](https://huggingface.co/flylcw/KevANE-0.6B)。
 
 ## 为什么用 Kev？为什么用 ANE？
 
@@ -13,7 +65,7 @@ KevANE 让 **Kev 0.6B 判断模型**在 Apple Silicon 本机运行。项目将 Q
 
 ## 安装
 
-需要 Apple Silicon Mac、[Conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html)，以及供 Core ML 模型和本机编译缓存使用的数 GB 空间。只需在首次安装时进入源码目录：
+需要运行 macOS 15+ 的 Apple Silicon Mac、[Conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html)，以及供 Core ML 模型和本机编译缓存使用的数 GB 空间。只需在首次安装时进入源码目录：
 
 ```bash
 git clone https://github.com/LCW0NJUPT/KevANE.git
@@ -40,7 +92,7 @@ kev-ane restart
 kev-ane cache status
 ```
 
-KevANE 使用 macOS 当前用户的 LaunchAgent；执行 `start` 时才按需加载并立即返回，提示服务就绪尚未确认，**不会随登录自动启动**。需要在继续操作前等接口就绪时，使用 `kev-ane start --wait`；`status` 会区分“加载中”和“已就绪”。服务监听 `127.0.0.1:8008`；`stop` 会等待 HTTP 和 Core ML 子进程退出。用户无须执行转换或编译命令：下载的模型直接交给 Core ML 运行。首次在一台 Mac 上加载时，Core ML 会自动完成一次设备准备，可能短时占满一个 CPU 核心；KevANE 把结果保存在 Git 忽略的 `build/compiled/`，后续启动不再重复。服务停止后可用 `kev-ane cache clear` 删除额外缓存，但下次启动需要重新准备。服务采用较低的 CPU 优先级并限制 CPU 库线程，以减少对前台应用的干扰。
+KevANE 使用 macOS 当前用户的 LaunchAgent；执行 `start` 时才按需加载并立即返回，提示服务就绪尚未确认，**不会随登录自动启动**。需要在继续操作前等接口就绪时，使用 `kev-ane start --wait`；`status` 会区分“加载中”和“已就绪”。服务监听 `127.0.0.1:8008`；`stop` 会等待 HTTP 和 Core ML 子进程退出。用户无须执行转换或编译命令：下载的模型直接交给 Core ML 运行。首次在一台 Mac 上加载时，Core ML 会自动完成一次设备准备，可能短时占满一个 CPU 核心；KevANE 把结果保存在 Git 忽略的 `build/compiled/`，后续启动不再重复。服务停止后可用 `kev-ane cache clear` 删除额外缓存，但下次启动需要重新准备。服务采用较低的 CPU 优先级、受限的 CPU 库线程数和被动 OpenMP 等待，以减少连续请求时对前台应用的干扰。
 
 检查服务：
 
@@ -61,15 +113,6 @@ kev-ane uninstall
 在 Jarvis 0.6.0 中，将 TypeSafe/System One 地址设为 `http://127.0.0.1:8008`、模型设为 `kevane-0.6b`；配置值见 [`integrations/jarvis/env.example`](integrations/jarvis/env.example)。先运行 `kev-ane start --wait`，再在 Jarvis 中测试连接。无需修改 Jarvis 安装包。
 
 KevANE 只负责**判断和候选排序**。回复文字由 Jarvis 单独配置的生成服务提供；窗口、OCR、文字填入也由 Jarvis 自己管理。Jarvis 0.6.0 的悬浮窗只监测微信窗口；切换到 Codex 时会按设计隐藏，判断接口正常也不会让 Jarvis 识别 Codex 窗口或在本机生成回复。即使 KevANE 没有开启鉴权，Jarvis 的 TypeSafe 密钥也要填 `local`：Jarvis 用非空密钥选择这条判断链路。如设置 `KEVANE_API_KEY`，则改填相同值。
-
-## 工作方式
-
-```text
-System One 请求 → Kev 编码 → Core ML 主干 → CPU Pointer Head → 判断结果
-                          （FP16，每次最多 512 token）    （选择/评分/是非）
-```
-
-Core ML 模型在独立子进程中运行，以便原生 Core ML 意外退出时保住 HTTP 服务。合并后的 PyTorch 主干仅供转换，日常推理不加载。模型文件清单见 [Hugging Face 模型卡](https://huggingface.co/flylcw/KevANE-0.6B)。
 
 ## 验证结果与限制
 

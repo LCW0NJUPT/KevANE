@@ -2,9 +2,61 @@
 
 # KevANE
 
+[![macOS 15+](https://img.shields.io/badge/macOS-15%2B-black?logo=apple)](https://apple.github.io/coremltools/docs-guides/source/stateful-models.html)
+[![Core ML](https://img.shields.io/badge/Core_ML-FP16-blue)](#how-it-runs)
+[![Apple Neural Engine](https://img.shields.io/badge/Apple_Neural_Engine-CPU_AND_NE-green)](#why-kev-why-ane)
+[![Hugging Face Model](https://img.shields.io/badge/Hugging_Face-Model-yellow?logo=huggingface)](https://huggingface.co/flylcw/KevANE-0.6B)
+
 [简体中文](README.zh-CN.md) · [Model files and card](https://huggingface.co/flylcw/KevANE-0.6B) · [License](LICENSE)
 
 KevANE runs the **Kev 0.6B decision model** locally on Apple Silicon. It converts the Qwen3 backbone to Core ML and exposes a TypeSafe-compatible `POST /v1/systemone` API. It can answer choice, score, and yes/no questions for clients such as [Jev Jarvis](https://github.com/jev-chat/jev-chat-jarvis-mac). It does not generate reply text.
+
+## Quickstart
+
+Requires **Apple Silicon, macOS 15+, [Conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html) already installed**, and several GB of free storage. The current stateful Core ML model requires macOS 15 or later.
+
+For a first install, clone, install, and wait for the service with one command:
+
+```bash
+git clone https://github.com/LCW0NJUPT/KevANE.git && cd KevANE && bash scripts/install.sh && ~/.local/bin/kev-ane start --wait
+```
+
+The first run downloads model files as needed and performs device preparation, so allow time for both. The installer itself does not start the service; the final command above does. The full command path works without a `PATH` change. For existing checkouts, mirrors, or local model files, see [Install](#install) and [Start, stop, and uninstall](#start-stop-and-uninstall).
+
+Then try a real decision: classify “早上好！” (“Good morning!”) as “问候” (greeting), “催进度” (requesting progress), or “求助” (asking for help).
+
+```bash
+curl --fail-with-body --noproxy '*' http://127.0.0.1:8008/v1/systemone \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"kevane-0.6b","state":"早上好！","questions":{"intent":{"type":"choice","instructions":"这句话的意图是什么？","criteria":{"问候":null,"催进度":null,"求助":null}}}}'
+```
+
+The response JSON contains `answers.intent.choice`, `confidence`, and per-option `probabilities`; inspect the actual response for the result. This is the integration pattern: send context and candidate options, then use the structured decision in your application.
+
+[Connect Jarvis](#connect-jarvis) · [Stop and uninstall](#start-stop-and-uninstall) · [Verification and limits](#verification-and-limits) · [Rebuild the model](#rebuild-from-the-source-checkpoint)
+
+## How it runs
+
+```text
+Context + Questions + Candidate Options
+                    ↓
+      CPU: Kev Encoder + Tokenizer
+                    ↓
+    Packed Input · padded to 512 tokens
+                    ↓
+     Core ML: 28-Layer Backbone · FP16
+              CPU_AND_NE
+                    ↓
+               Hidden States
+                    ↓
+           CPU: Pointer Head
+                    ↓
+       Answers + Option Probabilities
+```
+
+Each pass accepts up to 512 real tokens and pads shorter inputs to the fixed shape; candidate options also pass through the backbone. `CPU_AND_NE` excludes GPU but does not guarantee ANE placement for every operation. See [Verification and limits](#verification-and-limits) for oversized requests.
+
+The Core ML model runs in a separate process so an unexpected native Core ML exit does not immediately terminate the HTTP server. The merged PyTorch backbone is a conversion intermediate and is not needed at runtime. The model files are listed in the [Hugging Face model card](https://huggingface.co/flylcw/KevANE-0.6B).
 
 ## Why Kev? Why ANE?
 
@@ -13,7 +65,7 @@ KevANE runs the **Kev 0.6B decision model** locally on Apple Silicon. It convert
 
 ## Install
 
-Requirements: an Apple Silicon Mac, [Conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html), and several GB of free storage for the Core ML package and its local compiled cache. Clone the source once, then run the installer:
+Requirements: an Apple Silicon Mac running macOS 15+, [Conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html), and several GB of free storage for the Core ML package and its local compiled cache. Clone the source once, then run the installer:
 
 ```bash
 git clone https://github.com/LCW0NJUPT/KevANE.git
@@ -40,7 +92,7 @@ kev-ane restart
 kev-ane cache status
 ```
 
-KevANE uses a per-user macOS LaunchAgent. `start` loads it on demand and returns immediately with a message that readiness is unconfirmed; it is not configured to start at login. Run `kev-ane start --wait` when you need the endpoint to be ready before continuing. `status` distinguishes loading from ready. The service listens on `127.0.0.1:8008`; `stop` waits for both the HTTP process and its Core ML worker to exit. Users do not run a conversion or compilation command: the downloaded model runs through Core ML. On the first load on a Mac, Core ML performs one-time device preparation that can briefly use a full CPU core. KevANE retains its result in ignored `build/compiled/`, so subsequent starts do not repeat that work. Run `kev-ane cache clear` only while stopped to remove that extra disk usage; the next start will require device preparation again. The job uses a lower CPU priority and limited CPU library threads to reduce interference with foreground apps.
+KevANE uses a per-user macOS LaunchAgent. `start` loads it on demand and returns immediately with a message that readiness is unconfirmed; it is not configured to start at login. Run `kev-ane start --wait` when you need the endpoint to be ready before continuing. `status` distinguishes loading from ready. The service listens on `127.0.0.1:8008`; `stop` waits for both the HTTP process and its Core ML worker to exit. Users do not run a conversion or compilation command: the downloaded model runs through Core ML. On the first load on a Mac, Core ML performs one-time device preparation that can briefly use a full CPU core. KevANE retains its result in ignored `build/compiled/`, so subsequent starts do not repeat that work. Run `kev-ane cache clear` only while stopped to remove that extra disk usage; the next start will require device preparation again. The job uses a lower CPU priority, limited CPU library threads, and passive OpenMP waiting to reduce interference with foreground apps during repeated requests.
 
 Check the service:
 
@@ -61,15 +113,6 @@ Uninstall stops the service, removes both command names, LaunchAgent state, and 
 In Jarvis 0.6.0, set the TypeSafe/System One endpoint to `http://127.0.0.1:8008` and the model to `kevane-0.6b`. The values are also in [`integrations/jarvis/env.example`](integrations/jarvis/env.example). Run `kev-ane start --wait` before Jarvis's connection test. No patch to Jarvis is required.
 
 KevANE handles **judgment and candidate ranking**. Jarvis uses its own separately configured provider for reply generation and its own code for the window, OCR, and text insertion. Jarvis 0.6.0's overlay monitors WeChat windows; switching to Codex hides that overlay by design. A working decision endpoint does not make Jarvis recognize Codex windows or run reply generation locally. Set Jarvis's TypeSafe API key to `local` even when KevANE has no authentication: Jarvis uses a non-empty key to select this path. If `KEVANE_API_KEY` is set for the server, use that value instead.
-
-## How it runs
-
-```text
-System One request → Kev encoder → Core ML backbone → CPU pointer head → answers
-                                (FP16, ≤512 tokens per pass)   (choice/score/yes-no)
-```
-
-The Core ML model runs in a separate process so an unexpected native Core ML exit does not immediately terminate the HTTP server. The merged PyTorch backbone is a conversion intermediate and is not needed at runtime. The model files are listed in the [Hugging Face model card](https://huggingface.co/flylcw/KevANE-0.6B).
 
 ## Verification and limits
 
