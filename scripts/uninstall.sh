@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/kevane"
 LAUNCHER="$HOME/.local/bin/kev-ane"
-OLD_LAUNCHER="$HOME/.local/bin/kevane"
+ALIAS_LAUNCHER="$HOME/.local/bin/kevane"
 REMOVE_MODEL=0
 
 case "${1:-}" in
@@ -33,8 +33,10 @@ fi
 if [[ -f "$LAUNCHER" ]] && grep -Fq '# Managed by KevANE install.sh' "$LAUNCHER"; then
   rm "$LAUNCHER"
 fi
-if [[ -f "$OLD_LAUNCHER" ]] && grep -Fq '# Managed by KevANE install.sh' "$OLD_LAUNCHER"; then
-  rm "$OLD_LAUNCHER"
+if [[ -L "$ALIAS_LAUNCHER" && "$(readlink "$ALIAS_LAUNCHER")" == "$LAUNCHER" ]]; then
+  rm "$ALIAS_LAUNCHER"
+elif [[ -f "$ALIAS_LAUNCHER" ]] && grep -Fq '# Managed by KevANE install.sh' "$ALIAS_LAUNCHER"; then
+  rm "$ALIAS_LAUNCHER"
 fi
 rm -f "$STATE/info.kevane.systemone.plist" "$STATE/server.log" \
       "$STATE/install-root" "$STATE/install-python" "$STATE/install-model" \

@@ -21,7 +21,7 @@ cd KevANE
 bash scripts/install.sh
 ```
 
-安装脚本会明确选用 `kevane-runtime` Conda 环境，不受当前激活环境影响；必要时创建该环境，下载前先核对模型仓库文件，并创建 `~/.local/bin/kev-ane` 命令。服务直接从源码目录导入代码，安装脚本不会执行 `pip install -e`，也**不会自动启动服务**。如果终端的 `PATH` 尚未包含 `~/.local/bin`，在 `~/.zprofile` 中加入 `export PATH="$HOME/.local/bin:$PATH"`，再打开新终端。此前也可用 `~/.local/bin/kev-ane` 执行下列命令。
+安装脚本会明确选用 `kevane-runtime` Conda 环境，不受当前激活环境影响；必要时创建该环境，下载前先核对模型仓库文件，并创建 `~/.local/bin/kev-ane` 命令。主命令拼写为 **`kev-ane`**；若名称未被占用，也会安装 `kevane` 作为别名。服务直接从源码目录导入代码，安装脚本不会执行 `pip install -e`，也**不会自动启动服务**。如果终端的 `PATH` 尚未包含 `~/.local/bin`，安装脚本会显示完整命令路径和配置提示。macOS 默认 zsh 可在 `~/.zprofile` 中加入 `export PATH="$HOME/.local/bin:$PATH"`，再打开新终端。此前也可用 `~/.local/bin/kev-ane` 执行下列命令。
 
 模型文件默认放在**当前克隆仓库的 `hf-model/` 目录**。安装脚本先检查本地模型，文件齐全就跳过下载；否则先核对[模型仓库](https://huggingface.co/flylcw/KevANE-0.6B)的文件清单，再将所需文件下载到 `hf-model/`。若模型已放在其他目录，可运行 `bash scripts/install.sh --model-dir /模型目录的绝对路径`，无需复制或下载。无法直连 huggingface.co 的网络可先设置镜像，例如 `export HF_ENDPOINT=https://hf-mirror.com`；安装脚本的仓库检查和 `hf download` 都会遵循该变量。
 
@@ -40,7 +40,7 @@ kev-ane restart
 kev-ane cache status
 ```
 
-KevANE 使用 macOS 当前用户的 LaunchAgent；执行 `start` 时才按需加载并立即返回，**不会随登录自动启动**。需要在继续操作前等接口就绪时，使用 `kev-ane start --wait`；`status` 会区分“加载中”和“已就绪”。服务监听 `127.0.0.1:8008`；`stop` 会等待 HTTP 和 Core ML 子进程退出。用户无须执行转换或编译命令：下载的模型直接交给 Core ML 运行。首次在一台 Mac 上加载时，Core ML 会自动完成一次设备准备，可能短时占满一个 CPU 核心；KevANE 把结果保存在 Git 忽略的 `build/compiled/`，后续启动不再重复。服务停止后可用 `kev-ane cache clear` 删除额外缓存，但下次启动需要重新准备。服务采用较低的 CPU 优先级并限制 CPU 库线程，以减少对前台应用的干扰。
+KevANE 使用 macOS 当前用户的 LaunchAgent；执行 `start` 时才按需加载并立即返回，提示服务就绪尚未确认，**不会随登录自动启动**。需要在继续操作前等接口就绪时，使用 `kev-ane start --wait`；`status` 会区分“加载中”和“已就绪”。服务监听 `127.0.0.1:8008`；`stop` 会等待 HTTP 和 Core ML 子进程退出。用户无须执行转换或编译命令：下载的模型直接交给 Core ML 运行。首次在一台 Mac 上加载时，Core ML 会自动完成一次设备准备，可能短时占满一个 CPU 核心；KevANE 把结果保存在 Git 忽略的 `build/compiled/`，后续启动不再重复。服务停止后可用 `kev-ane cache clear` 删除额外缓存，但下次启动需要重新准备。服务采用较低的 CPU 优先级并限制 CPU 库线程，以减少对前台应用的干扰。
 
 检查服务：
 
@@ -54,7 +54,7 @@ curl --noproxy '*' http://127.0.0.1:8008/healthz
 kev-ane uninstall
 ```
 
-卸载会停止服务，移除命令、LaunchAgent 状态及编译缓存；只有安装脚本新建的 Conda 环境才会被删除。源码和模型默认保留。`kev-ane uninstall --remove-model` 只会删除**由安装脚本下载**的模型，不会删除预先放入 `hf-model/` 或通过 `--model-dir` 指定的模型。更新已克隆的仓库时，拉取代码、重新运行 `bash scripts/install.sh`，再执行 `kev-ane restart`。不再需要源码时可自行删除仓库目录。如需以前台方式运行，在仓库目录激活 `kevane-runtime` 后执行 `python scripts/30_systemone_server.py --model-dir hf-model --port 8008`。
+卸载会停止服务，移除两个命令名、LaunchAgent 状态及编译缓存；只有安装脚本新建的 Conda 环境才会被删除。源码和模型默认保留。`kev-ane uninstall --remove-model` 只会删除**由安装脚本下载**的模型，不会删除预先放入 `hf-model/` 或通过 `--model-dir` 指定的模型。更新已克隆的仓库时，拉取代码、重新运行 `bash scripts/install.sh`，再执行 `kev-ane restart`。如果旧源码目录已经不存在，可从新克隆重新安装；安装器会卸载旧 KevANE 作业并替换过期的安装记录。不再需要源码时可自行删除仓库目录。如需以前台方式运行，在仓库目录激活 `kevane-runtime` 后执行 `python scripts/30_systemone_server.py --model-dir hf-model --port 8008`。
 
 ## 连接 Jarvis
 

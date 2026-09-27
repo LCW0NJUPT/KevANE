@@ -6,10 +6,12 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/kevane"
 BIN_DIR="$HOME/.local/bin"
 LAUNCHER="$BIN_DIR/kev-ane"
-OLD_LAUNCHER="$BIN_DIR/kevane"
+ALIAS_LAUNCHER="$BIN_DIR/kevane"
 ENV_NAME="kevane-runtime"
 MODEL="$ROOT/hf-model"
 MODEL_OWNED=0
+STALE_ROOT=""
+ALIAS_AVAILABLE=1
 
 usage() {
   echo "Usage: bash scripts/install.sh [--model-dir PATH]"
@@ -49,11 +51,24 @@ if ! command -v conda >/dev/null 2>&1; then
   echo "Install Conda and make its conda command available in this shell first." >&2; exit 2
 fi
 if [[ -f "$STATE/install-root" && "$(cat "$STATE/install-root")" != "$ROOT" ]]; then
-  echo "KevANE is installed from another directory: $(cat "$STATE/install-root")" >&2
-  echo "Uninstall that copy before installing this one." >&2; exit 2
+  previous_root="$(cat "$STATE/install-root")"
+  if [[ -f "$previous_root/scripts/uninstall.sh" ]]; then
+    echo "KevANE is installed from another directory: $previous_root" >&2
+    echo "Uninstall that copy before installing this one." >&2; exit 2
+  fi
+  STALE_ROOT="$previous_root"
 fi
 if [[ -e "$LAUNCHER" ]] && ! grep -Fq '# Managed by KevANE install.sh' "$LAUNCHER"; then
   echo "Command path already exists and is not managed by KevANE: $LAUNCHER" >&2; exit 2
+fi
+if [[ -e "$ALIAS_LAUNCHER" || -L "$ALIAS_LAUNCHER" ]]; then
+  if [[ -L "$ALIAS_LAUNCHER" && "$(readlink "$ALIAS_LAUNCHER")" == "$LAUNCHER" ]]; then
+    :
+  elif [[ -f "$ALIAS_LAUNCHER" ]] && grep -Fq '# Managed by KevANE install.sh' "$ALIAS_LAUNCHER"; then
+    :
+  else
+    ALIAS_AVAILABLE=0
+  fi
 fi
 if [[ -f "$STATE/install-root" && -f "$STATE/install-model" &&
       "$(cat "$STATE/install-root")" == "$ROOT" &&
@@ -147,6 +162,18 @@ if ! model_ready "$MODEL"; then
   MODEL_OWNED=1
 fi
 
+if [[ -n "$STALE_ROOT" ]]; then
+  service="gui/$(id -u)/info.kevane.systemone"
+  if launchctl print "$service" >/dev/null 2>&1; then
+    /bin/bash "$ROOT/scripts/kevane_service.sh" stop
+    if launchctl print "$service" >/dev/null 2>&1; then
+      echo "Could not unload the old KevANE service; command and installation records were not changed." >&2
+      exit 1
+    fi
+  fi
+  echo "Recovering installation whose old source directory is unavailable: $STALE_ROOT"
+fi
+
 mkdir -p "$STATE" "$BIN_DIR"
 tmp="$LAUNCHER.tmp.$$"
 {
@@ -159,8 +186,12 @@ tmp="$LAUNCHER.tmp.$$"
 } > "$tmp"
 chmod 755 "$tmp"
 mv "$tmp" "$LAUNCHER"
-if [[ -f "$OLD_LAUNCHER" ]] && grep -Fq '# Managed by KevANE install.sh' "$OLD_LAUNCHER"; then
-  rm "$OLD_LAUNCHER"
+if (( ALIAS_AVAILABLE )); then
+  alias_tmp="$ALIAS_LAUNCHER.tmp.$$"
+  ln -s "$LAUNCHER" "$alias_tmp"
+  mv -f "$alias_tmp" "$ALIAS_LAUNCHER"
+else
+  echo "Compatibility command 'kevane' was not installed because $ALIAS_LAUNCHER is not managed by KevANE." >&2
 fi
 printf '%s\n' "$ROOT" > "$STATE/install-root"
 printf '%s\n' "$PYTHON" > "$STATE/install-python"
@@ -171,9 +202,12 @@ if (( CREATED_ENV )); then
 fi
 
 echo "Installed: $LAUNCHER"
+if (( ALIAS_AVAILABLE )); then echo "Commands: kev-ane (primary), kevane (alias)"; fi
 echo "Model: $MODEL"
-echo "The service is stopped until you run: $LAUNCHER start"
+echo "The service is stopped until you run: $LAUNCHER start --wait"
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
-  echo "To use 'kev-ane' without its full path, add this to ~/.zprofile:"
+  echo "The command directory $BIN_DIR is not on this shell's PATH."
+  echo "For the default macOS zsh, add this to ~/.zprofile and open a new terminal:"
   echo '  export PATH="$HOME/.local/bin:$PATH"'
+  echo "Until then, use the full command path printed above."
 fi

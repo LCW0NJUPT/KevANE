@@ -159,7 +159,7 @@ PY
     if (( wait_for_ready )); then
       wait_ready
     else
-      echo "KevANE is starting; use 'kev-ane status' to check readiness."
+      echo "KevANE launch requested; readiness is not confirmed yet. Run 'kev-ane start --wait' or 'kev-ane status' to check."
     fi
     ;;
   stop) stop_service ;;
